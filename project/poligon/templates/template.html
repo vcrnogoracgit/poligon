@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Poligon</title>
+
+    <style>
+
+        .upozorenje {
+            background-color: #F08080;
+            border-radius: 2px;
+        }
+
+        .ne-aktivan-btn {
+          background-color: #DCDCDC;
+          cursor: no-drop;
+        }
+
+        button {
+          background-color: #4CAF50;
+          border: none;
+          color: white;
+          text-align: center;
+          text-decoration: none;
+          display: inline-block;
+          font-size: 16px;
+          margin: 4px 2px;
+          cursor: pointer;
+          padding: 10px 24px;
+          border-radius: 2px;
+          width: 90%;
+        }
+
+        .btn-group {
+            width: 25%;
+            height: 320px;
+            float: left;
+        }
+        .osnovni_info {
+            margin-left: 25%;
+            height: 320px;
+        }
+
+        form {
+            height: 150px;
+            width: 300px;
+            background-color: #DCDCDC;
+        }
+
+        input {
+            margin-left: 25px;
+            width: 150px;
+        }
+
+        table {
+          font-family: arial, sans-serif;
+          border-collapse: collapse;
+          width: 100%;
+        }
+
+        td, th {
+          border: 1px solid #dddddd;
+          text-align: left;
+          padding: 8px;
+        }
+
+        tr:nth-child(even) {
+          background-color: #dddddd;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="btn-group">
+        <button id="poligon_btn" onclick="dodaj_poligon()">Dodaj novi poligon</button>
+        <br>
+        <button id="novo_tjeme_btn" onclick="dodaj_tjeme()">Dodaj novo tjeme</button>
+        <br>
+        <button id="novo_tacka_btn" onclick="dodaj_tacku()">Dodaj novu tacku</button>
+        <br>
+        <button id="odustani_btn" onclick="odustani()">Odustani</button>
+        <br>
+    </div>
+
+    <div id="osnovni_info" class="osnovni_info">
+        {% if poligon %}
+            <p id="upozorenje" class="upozorenje"></p>
+
+            {% if poligon.naziv %}
+                <p style="font-size:20px">Naziv poligona:<b> {{ poligon.naziv }} </b></p>
+            {% endif %}
+
+            {% if broj_tjemena > 0 %}
+            <p>Tjemena poligona:</p>
+            <table>
+                <tr>
+                    <td> x: </td>
+                    {% for tjeme in tjemena %}
+                    <td>{{ tjeme.x_koordinata }}</td>
+                    {% endfor %}
+                </tr>
+                <tr>
+                    <td> y: </td>
+                    {% for tjeme in tjemena %}
+                    <td>{{ tjeme.y_koordinata }}</td>
+                    {% endfor %}
+                </tr>
+            </table>
+            {% endif %}
+         {% else %}
+            <p>Trenutno nema dostupnih poligona. Dodajte poligon.</p>
+        {% endif %}
+        <p id="tacke_u_poligonu"></p>
+    </div>
+
+    <form id="poligon_forma" action="{% url 'dodaj_poligon'}" method="post" style="display: none">
+        {% csrf_token %}
+        <b style="font-size: 18px; text-align: center;">Uesite potrebne parametre.</b>
+        <br>
+        <br>
+        <label>Naziv Polinoma:</label>
+        <input type="text" name="naziv_poligona" value="" required>
+        <br>
+
+        <button type="submit" style="width: 30%;">Potvrdi</button>
+    </form>
+
+    <form  id="dodaj_tacku_forma" name="dodaj_tacku_forma" action="{% url 'dodaj_tacku'}" onsubmit="return validate_dodaj_tacku_forma()" method="post" style="display: none">
+        {% csrf_token %}
+        {% if poligon.status == 2 %}
+        <p>Dodajte novo tacku</p>
+        {% else %}
+        <p>Dodajte novo tjeme poligonu</p>
+        {% endif %}
+        <label>X kordinata:</label>
+        <input type="text" name="x_koordinata" value="" required>
+        <br>
+        <label>Y kordinata:</label>
+        <input type="text" name="y_koordinata" value="" required>
+        <input id="tjeme_tacka_form" type="text" name="tjeme_tacka" value="DODAJ_TJEME" style="display: none">
+        <br>
+        <button type="submit" style="width: 30%;">Potvrdi</button>
+    </form>
+
+    <br>
+    <canvas id="poligon" width="3000" height="1500" style="border:1px solid #d3d3d3;"> </canvas>
+    <script>
+
+        x_kordinate_tjeme = [];
+        y_kordinate_tjeme = [];
+        x_kordinate_tacka = [];
+        y_kordinate_tacka = [];
+
+        function pisanje_upozorenja(){
+            var upozorenje = "";
+            {% if broj_tjemena == 0 %}
+                upozorenje = "Poligon mora imati bar 3 tjemena.<br> Vas poligon trenutno nema nijedno tjeme, unesite tjemana poligona.";
+            {% elif broj_tjemena == 1 %}
+                upozorenje = "Poligon mora imati bar 3 tjemena.<br> Vas poligon trenutno jedno tjeme, unesite preostala tjemana."
+            {% elif broj_tjemena == 2 %}
+                upozorenje = "Poligon mora imati bar 3 tjemena.<br> Vas poligon trenutno dva tjemena, unesite preostala tjemana."
+            {% endif %}
+            {% if poligon %}
+               document.getElementById("upozorenje").innerHTML = upozorenje;
+            {% endif %}
+        }
+
+        function dozvoljena_akcija(){
+            {% if akcija == "start" %}
+                document.getElementById("poligon_forma").style.display = "none";
+                document.getElementById("dodaj_tacku_forma").style.display = "none";
+                document.getElementById("poligon_btn").className="";
+                document.getElementById("odustani_btn").className="ne-aktivan-btn";
+                {% if poligon.status == 2 or broj_tjemena > 2 %}
+                    document.getElementById("novo_tjeme_btn").className="ne-aktivan-btn";
+                    document.getElementById("novo_tacka_btn").className="";
+                {% elif broj_tjemena < 3 %}
+                    document.getElementById("novo_tjeme_btn").className="";
+                    document.getElementById("novo_tacka_btn").className="ne-aktivan-btn";
+                {% endif %}
+
+                {% if not poligon %}
+                    document.getElementById("novo_tjeme_btn").className="ne-aktivan-btn";
+                    document.getElementById("novo_tacka_btn").className="ne-aktivan-btn";
+                {% endif %}
+            {% elif akcija == "dodaj_poligon" %}
+                document.getElementById("poligon_forma").style.display = "none";
+                document.getElementById("dodaj_tacku_forma").style.display = "none";
+                document.getElementById("poligon_btn").className="ne-aktivan-btn";
+                document.getElementById("novo_tjeme_btn").className="";
+                document.getElementById("novo_tacka_btn").className="ne-aktivan-btn";
+                document.getElementById("odustani_btn").className="ne-aktivan-btn";
+            {% elif akcija == "dodaj_tjeme" %}
+                document.getElementById("poligon_forma").style.display = "none";
+                document.getElementById("dodaj_tacku_forma").style.display = "none";
+                document.getElementById("poligon_btn").className="ne-aktivan-btn";
+                document.getElementById("novo_tjeme_btn").className="";
+                document.getElementById("odustani_btn").className="ne-aktivan-btn";
+                {% if broj_tjemena > 2 %}
+                    document.getElementById("novo_tacka_btn").className="";
+                {% else %}
+                    document.getElementById("novo_tacka_btn").className="ne-aktivan-btn";
+                {% endif %}
+            {% else %}
+                document.getElementById("poligon_forma").style.display = "none";
+                document.getElementById("dodaj_tacku_forma").style.display = "none";
+                document.getElementById("poligon_btn").className="";
+                document.getElementById("novo_tjeme_btn").className="ne-aktivan-btn";
+                document.getElementById("odustani_btn").className="ne-aktivan-btn";
+                document.getElementById("novo_tacka_btn").className="";
+            {% endif %}
+
+        }
+
+        function odustani(){
+            dozvoljena_akcija();
+        }
+
+        function dodaj_tacku(){
+            document.getElementById("poligon_forma").style.display = "none";
+            document.getElementById("dodaj_tacku_forma").style.display = "block";
+            document.getElementById("poligon_btn").className="ne-aktivan-btn";
+            document.getElementById("novo_tjeme_btn").className="ne-aktivan-btn";
+            document.getElementById("novo_tacka_btn").className="ne-aktivan-btn";
+            document.getElementById("odustani_btn").className="";
+            document.getElementById("tjeme_tacka_form").value="ZATVORI_POLIGON";
+        }
+
+        function dodaj_tjeme(){
+            document.getElementById("poligon_forma").style.display = "none";
+            document.getElementById("dodaj_tacku_forma").style.display = "block";
+            document.getElementById("poligon_btn").className="ne-aktivan-btn";
+            document.getElementById("novo_tjeme_btn").className="ne-aktivan-btn";
+            document.getElementById("novo_tacka_btn").className="ne-aktivan-btn";
+            document.getElementById("odustani_btn").className="";
+            document.getElementById("tjeme_tacka_form").value="DODAJ_TJEME";
+        }
+
+        function dodaj_poligon(){
+            document.getElementById("poligon_forma").style.display = "block";
+            document.getElementById("dodaj_tacku_forma").style.display = "none";
+            document.getElementById("poligon_btn").className="ne-aktivan-btn";
+            document.getElementById("novo_tjeme_btn").className="ne-aktivan-btn";
+            document.getElementById("novo_tacka_btn").className="ne-aktivan-btn";
+            document.getElementById("odustani_btn").className="";
+        }
+
+        function tacke_u_poligonu(){
+            {% if broj_tacaka > 0 %}
+                text = "Trenutno ima ";
+                text += {{ broj_tacaka }};
+                text += " unesenih tacaka. U poligonu se nalazi ";
+                text += {{ broj_tacaka_u_poligonu }};
+                text += " tacaka.<br>";
+                text += "<table>";
+                text_1 = "<tr><td> Tacke: </td>";
+                text_2 = "<tr><td> je u poligonu: </td>";
+                text_3 = "<tr><td> max udaljenost: </td>";
+                text_4 = "<tr><td> min udaljenost: </td>";
+                {% for tacka in tacke %}
+                    text_1 += "<td> (";
+                    text_1 += {{ tacka.x_koordinata }};
+                    text_1 +=  ", ";
+                    text_1 += {{ tacka.y_koordinata }};
+                    text_1 +=  ")</td>";
+
+                    text_2 += "<td>";
+                    {% if tacka.tacka_je_u_poligonu == 0 %}
+                        text_2 += "NE";
+                    {% else %}
+                        text_2 += "DA";
+                    {% endif %}
+                    text_2 +=  "</td>";
+
+                    text_3 += "<td>";
+                    text_3 += {{ tacka.max_daljina }};
+                    text_3 +=  "</td>";
+
+                    text_4 += "<td>";
+                    text_4 += {{ tacka.min_daljina }};
+                    text_4 += "</td>";
+
+
+                {% endfor %}
+                text_1 += "</tr>";
+                text_2 += "</tr>";
+                text_3 += "</tr>";
+                text_4 += "</tr>";
+                text += text_1;
+                text += text_2;
+                text += text_3;
+                text += text_4;
+                text += "</table>";
+                document.getElementById("tacke_u_poligonu").innerHTML = text;
+            {% elif poligon %}
+                document.getElementById("tacke_u_poligonu").innerHTML = "Trenutno nema unesenih tacaka";
+            {% endif %}
+        }
+
+        function validate_dodaj_tacku_forma() {
+            var x = document.forms["dodaj_tacku_forma"]["x_koordinata"].value;
+            var y = document.forms["dodaj_tacku_forma"]["y_koordinata"].value;
+            var valid_x = (x.match(/^\d+(\.\d+)?$/));
+            var valid_y = (y.match(/^\d+(\.\d+)?$/));
+            if (!valid_x || !valid_y || x > 3000 || y > 1500) {
+                alert("Unesene koordinate nisu korektne.\nNapomena: 0 < x < 3000 i 0 < y < 1500.");
+                return false;
+            }
+        }
+
+        {% if broj_tjemena > 0 %}
+        function crtanje_poligona(){
+            var c = document.getElementById("poligon");
+            var ctx = c.getContext("2d");
+            ctx.beginPath();
+            var x = x_kordinate_tjeme[0];
+            var y = y_kordinate_tjeme[0];
+            if (x_kordinate_tjeme.length == 1){
+            	ctx.arc(x,y,1,0,2*Math.PI);
+            }
+            else{
+            	ctx.moveTo(x, y);
+            	for (i=1; i<x_kordinate_tjeme.length; i++){
+            		x = x_kordinate_tjeme[i];
+            		y = y_kordinate_tjeme[i];
+            		ctx.lineTo(x, y);
+            	}
+            }
+            var z = {{ poligon.status }};
+            if (z==2){
+                ctx.lineTo(x_kordinate_tjeme[0], y_kordinate_tjeme[0]);
+            }
+            ctx.stroke();
+        }
+
+        function crtanje_tacaka(x, y){
+        	var c = document.getElementById("poligon");
+        	c.style.display = "block";
+        	var ctx = c.getContext("2d");
+        	ctx.beginPath();
+        	ctx.arc(x,y,1,0,2*Math.PI);
+        	ctx.stroke();
+        }
+        {% endif %}
+
+        function main(){
+            var x, y;
+            {% for tjeme in tjemena %}
+                x = {{ tjeme.x_koordinata }}
+                y = {{ tjeme.y_koordinata }}
+                x_kordinate_tjeme.push(x);
+                y_kordinate_tjeme.push(y);
+            {% endfor %}
+            {% for tacka in tacke %}
+                x = {{ tacka.x_koordinata }}
+                y = {{ tacka.y_koordinata }}
+                x_kordinate_tacka.push(x);
+                y_kordinate_tacka.push(y);
+            {% endfor %}
+
+            {% if broj_tjemena > 0 %}
+                crtanje_poligona();
+                var i=0;
+                for (i=0; i < x_kordinate_tacka.length; i++){
+                    x = x_kordinate_tacka[i];
+                    y = y_kordinate_tacka[i];
+                    crtanje_tacaka(x, y);
+                }
+            {% endif %}
+            pisanje_upozorenja();
+            dozvoljena_akcija();
+            tacke_u_poligonu();
+        }
+    </script>
+
+    <script>
+        main();
+    </script>
+
+</body>
+</html>
